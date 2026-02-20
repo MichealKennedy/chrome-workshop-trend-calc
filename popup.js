@@ -24,6 +24,7 @@
 
 let advisors = {};
 let forecasts = {};
+let currentForecastSort = 'az';
 
 function advisorKey(code, location) {
   return code + '|' + (location || '').trim();
@@ -297,6 +298,49 @@ function showMsg(text, isError) {
   setTimeout(() => { el.textContent = ''; el.className = ''; }, 6000);
 }
 
+function getNewestWorkshopDate(advisor) {
+  if (!advisor || !advisor.workshops || advisor.workshops.length === 0) return 0;
+  let max = 0;
+  advisor.workshops.forEach(ws => {
+    const t = new Date(ws.workshopDate).getTime();
+    if (t > max) max = t;
+  });
+  return max;
+}
+
+function getSortedForecastKeys() {
+  const keys = Object.keys(advisors);
+  switch (currentForecastSort) {
+    case 'az':
+      return keys.sort((a, b) => a.localeCompare(b));
+    case 'za':
+      return keys.sort((a, b) => b.localeCompare(a));
+    case 'recent':
+      return keys.sort((a, b) => getNewestWorkshopDate(advisors[b]) - getNewestWorkshopDate(advisors[a]));
+    case 'oldest':
+      return keys.sort((a, b) => getNewestWorkshopDate(advisors[a]) - getNewestWorkshopDate(advisors[b]));
+    default:
+      return keys.sort();
+  }
+}
+
+function applyForecastSearch() {
+  const searchInput = document.getElementById('forecast-search');
+  if (!searchInput) return;
+  const query = searchInput.value.trim().toLowerCase();
+  const rows = document.querySelectorAll('#forecast-rows .forecast-row');
+  rows.forEach(row => {
+    if (!query) {
+      row.classList.remove('search-hidden');
+      return;
+    }
+    const code = row.dataset.code || '';
+    const location = row.dataset.location || '';
+    const matches = code.includes(query) || location.includes(query);
+    row.classList.toggle('search-hidden', !matches);
+  });
+}
+
 function renderAll() {
   renderForecast();
   renderStoredData();
@@ -305,14 +349,17 @@ function renderAll() {
 function renderForecast() {
   const container = document.getElementById('forecast-rows');
   const warning = document.getElementById('no-data-warning');
-  const keys = Object.keys(advisors).sort();
+  const toolbar = document.getElementById('forecast-toolbar');
+  const keys = getSortedForecastKeys();
 
   if (keys.length === 0) {
     warning.style.display = 'block';
+    toolbar.style.display = 'none';
     container.innerHTML = '';
     return;
   }
   warning.style.display = 'none';
+  toolbar.style.display = 'flex';
 
   // Ensure each advisor has a forecast entry
   keys.forEach(key => {
@@ -341,56 +388,60 @@ function renderForecast() {
     const sid = safeId(key);
 
     return `
-      <div class="forecast-row ${borderClass}" data-key="${esc(key)}">
-        <div class="forecast-header">
+      <div class="forecast-row ${borderClass}" data-key="${esc(key)}"
+           data-code="${esc(adv.code.toLowerCase())}" data-location="${esc(adv.location.toLowerCase())}">
+        <div class="forecast-header" data-action="toggle-forecast" data-sid="${sid}">
+          <span class="advisor-card-toggle" id="ftoggle-${sid}">&#9654;</span>
           <span class="advisor-badge">${esc(adv.code)}</span>
           <span class="advisor-location">${esc(adv.location)}</span>
           <span class="advisor-meta">${adv.workshops.length} ws · ${(showRate * 100).toFixed(1)}% show rate</span>
         </div>
-        <div class="forecast-inputs">
-          <div class="field">
-            <label>Current Feds Registered</label>
-            <input type="number" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
+        <div class="forecast-card-body" id="fbody-${sid}">
+          <div class="forecast-inputs">
+            <div class="field">
+              <label>Current Feds Registered</label>
+              <input type="number" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Current Spouses Registered</label>
+              <input type="number" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Target Attendance</label>
+              <input type="number" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
+            </div>
           </div>
-          <div class="field">
-            <label>Current Spouses Registered</label>
-            <input type="number" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
+          ${hasData ? `
+          <div class="forecast-results-wrap">
+          <div class="forecast-results">
+            <div class="result-item">
+              <div class="rlabel">Currently Reg</div>
+              <div class="rvalue">${totalReg}</div>
+            </div>
+            <div class="result-item">
+              <div class="rlabel">Expected Att.</div>
+              <div class="rvalue amber">${expectedAtt.toFixed(1)}</div>
+            </div>
+            <div class="result-item">
+              <div class="rlabel">Close At</div>
+              <div class="rvalue">${closeAt}</div>
+            </div>
+            <div class="result-item">
+              <div class="rlabel">Decision</div>
+              <span class="badge ${shouldClose ? 'badge-close' : 'badge-open'}">${shouldClose ? 'CLOSE' : 'KEEP OPEN'}</span>
+              <div class="decision-note">${totalReg} ${shouldClose ? '≥' : '<'} ${closeAt}</div>
+            </div>
           </div>
-          <div class="field">
-            <label>Target Attendance</label>
-            <input type="number" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
+          ${resultStr ? `<button class="copy-btn" data-action="copy-result" data-text="${esc(resultStr)}">📋 Copy result</button>` : ''}
           </div>
+          ` : ''}
         </div>
-        ${hasData ? `
-        <div class="forecast-results-wrap">
-        <div class="forecast-results">
-          <div class="result-item">
-            <div class="rlabel">Currently Reg</div>
-            <div class="rvalue">${totalReg}</div>
-          </div>
-          <div class="result-item">
-            <div class="rlabel">Expected Att.</div>
-            <div class="rvalue amber">${expectedAtt.toFixed(1)}</div>
-          </div>
-          <div class="result-item">
-            <div class="rlabel">Close At</div>
-            <div class="rvalue">${closeAt}</div>
-          </div>
-          <div class="result-item">
-            <div class="rlabel">Decision</div>
-            <span class="badge ${shouldClose ? 'badge-close' : 'badge-open'}">${shouldClose ? 'CLOSE' : 'KEEP OPEN'}</span>
-            <div class="decision-note">${totalReg} ${shouldClose ? '≥' : '<'} ${closeAt}</div>
-          </div>
-        </div>
-        ${resultStr ? `<button class="copy-btn" data-action="copy-result" data-text="${esc(resultStr)}">📋 Copy result</button>` : ''}
-        </div>
-        ` : ''}
       </div>
     `;
   }).join('');
 
   // Bind input events — update results in-place without re-rendering inputs
-  container.querySelectorAll('input').forEach(inp => {
+  container.querySelectorAll('input[data-key]').forEach(inp => {
     inp.addEventListener('input', (e) => {
       const key = e.target.dataset.key;
       const field = e.target.dataset.field;
@@ -400,6 +451,9 @@ function renderForecast() {
       updateForecastResults(key);
     });
   });
+
+  // Re-apply search filter after re-render
+  applyForecastSearch();
 }
 
 function updateForecastResults(key) {
@@ -465,7 +519,8 @@ function updateForecastResults(key) {
     resultsEl = document.createElement('div');
     resultsEl.className = 'forecast-results-wrap';
     resultsEl.innerHTML = html;
-    row.appendChild(resultsEl);
+    const body = row.querySelector('.forecast-card-body');
+    (body || row).appendChild(resultsEl);
   }
 }
 
@@ -574,10 +629,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Forecast search
+  document.getElementById('forecast-search').addEventListener('input', () => {
+    applyForecastSearch();
+  });
+
+  // Forecast sort
+  document.getElementById('forecast-sort').addEventListener('change', (e) => {
+    currentForecastSort = e.target.value;
+    renderForecast();
+  });
+
   // Delegated clicks
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
+
+    if (btn.dataset.action === 'toggle-forecast') {
+      const sid = btn.dataset.sid;
+      const body = document.getElementById('fbody-' + sid);
+      const toggle = document.getElementById('ftoggle-' + sid);
+      if (body) body.classList.toggle('show');
+      if (toggle) toggle.classList.toggle('expanded');
+    }
 
     if (btn.dataset.action === 'toggle-card') {
       const sid = btn.dataset.sid;

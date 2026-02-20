@@ -121,6 +121,38 @@
   .total-count { font-size: 11px; color: #64748b; margin-bottom: 12px; }
   .delete-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid #1e293b; display: flex; align-items: center; gap: 10px; }
   .delete-section .warn-text { font-size: 10px; color: #64748b; }
+  /* Forecast toolbar */
+  .forecast-toolbar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  }
+  .forecast-search-wrap { flex: 1; }
+  .forecast-search {
+    width: 100%; padding: 7px 10px;
+    background: #0f172a; border: 1px solid #334155; border-radius: 4px;
+    color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .forecast-search:focus { border-color: #3b82f6; }
+  .forecast-search::placeholder { color: #475569; }
+  .forecast-sort-wrap { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .forecast-sort-label {
+    font-size: 10px; color: #64748b; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .forecast-sort {
+    padding: 6px 8px; background: #0f172a; border: 1px solid #334155; border-radius: 4px;
+    color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    outline: none; cursor: pointer;
+  }
+  .forecast-sort:focus { border-color: #3b82f6; }
+  /* Forecast collapsible rows */
+  .forecast-row .forecast-header {
+    cursor: pointer; margin-bottom: 0; transition: background 0.15s; border-radius: 4px;
+  }
+  .forecast-row .forecast-header:hover { background: #1e293b; }
+  .forecast-card-body { display: none; padding-top: 10px; }
+  .forecast-card-body.show { display: block; }
+  .forecast-row.search-hidden { display: none; }
 </style>
 </head>
 <body>
@@ -153,6 +185,21 @@
   <div id="panel-forecast" class="panel active">
     <div id="no-data-warning" class="warning" style="display:none;">
       ⚠ No advisors loaded. Go to "Paste Data" and paste an advisor's stats to get started.
+    </div>
+    <div id="forecast-toolbar" class="forecast-toolbar" style="display:none;">
+      <div class="forecast-search-wrap">
+        <input type="text" id="forecast-search" class="forecast-search"
+               placeholder="Search by code or city..." autocomplete="off">
+      </div>
+      <div class="forecast-sort-wrap">
+        <label class="forecast-sort-label" for="forecast-sort">Sort:</label>
+        <select id="forecast-sort" class="forecast-sort">
+          <option value="az" selected>A &rarr; Z</option>
+          <option value="za">Z &rarr; A</option>
+          <option value="recent">Most Recent Workshop</option>
+          <option value="oldest">Least Recent Workshop</option>
+        </select>
+      </div>
     </div>
     <div id="forecast-rows"></div>
   </div>
