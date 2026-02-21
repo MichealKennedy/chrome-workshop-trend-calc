@@ -171,13 +171,18 @@
 
   <div id="panel-paste" class="panel">
     <div class="paste-help">
-      Highlight an advisor's stats block from the spreadsheet — include the code in column A (e.g. AVL)
-      and all the rows from Date down through % Yes — then paste below.<br>
-      The advisor code is auto-detected and used as the identifier. Duplicate workshop dates for the same advisor are overwritten with the latest paste.
+      Highlight one or more advisors' stats blocks from the spreadsheet — include the code in column A (e.g. AVL)
+      and all the rows from Date down through % Yes — then paste below.
+      You can paste multiple advisors at once; each block is auto-detected by the advisor code in column A.<br>
+      Duplicate workshop dates for the same advisor are overwritten with the latest paste.
     </div>
-    <textarea id="paste-area" placeholder="Highlight an advisor's stats block and paste here (Ctrl+V / Cmd+V)..."></textarea>
+    <textarea id="paste-area" placeholder="Paste one or more advisors' stats blocks here (Ctrl+V / Cmd+V)..."></textarea>
     <div class="btn-row">
-      <button class="btn btn-primary" id="btn-import">Import / Update Advisor</button>
+      <button class="btn btn-primary" id="btn-import">Import / Update Advisor(s)</button>
+      <label class="btn btn-primary" style="background: #334155; cursor: pointer;">
+        Upload File
+        <input type="file" id="file-upload" accept=".tsv,.csv,.txt,.tab" style="display:none;">
+      </label>
     </div>
     <div id="paste-msg"></div>
   </div>
@@ -196,8 +201,7 @@
         <select id="forecast-sort" class="forecast-sort">
           <option value="az" selected>A &rarr; Z</option>
           <option value="za">Z &rarr; A</option>
-          <option value="recent">Most Recent Workshop</option>
-          <option value="oldest">Least Recent Workshop</option>
+          <option value="updated">Recently Updated</option>
         </select>
       </div>
     </div>
@@ -207,6 +211,10 @@
   <div id="panel-data" class="panel">
     <div class="total-count" id="total-count"></div>
     <div id="advisor-list"></div>
+    <div class="delete-section" id="delete-all-section" style="display:none; margin-top: 14px;">
+      <button class="btn btn-danger btn-sm" id="btn-delete-all">Delete All Data</button>
+      <span class="warn-text">Removes all advisors, workshops, and forecast data</span>
+    </div>
   </div>
 </div>
 <script src="popup.js"></script>

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Workshop Trend Calculator",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Calculate workshop closing numbers from historical attendance data",
   "action": {
     "default_popup": "popup.html",

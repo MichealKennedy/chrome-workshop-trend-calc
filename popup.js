@@ -41,13 +41,14 @@ function safeId(key) {
 
 // --- Storage ---
 function saveData() {
-  chrome.storage.local.set({ advisors, forecasts });
+  chrome.storage.local.set({ advisors, forecasts, currentForecastSort });
 }
 
 function loadData(cb) {
-  chrome.storage.local.get(['advisors', 'forecasts'], (result) => {
+  chrome.storage.local.get(['advisors', 'forecasts', 'currentForecastSort'], (result) => {
     if (result.advisors) advisors = result.advisors;
     if (result.forecasts) forecasts = result.forecasts;
+    if (result.currentForecastSort) currentForecastSort = result.currentForecastSort;
     cb();
   });
 }
@@ -98,6 +99,45 @@ function matchLabel(text) {
     }
   }
   return null;
+}
+
+// --- Split Multi-Advisor Paste ---
+function splitMultiAdvisorBlocks(text) {
+  const lines = text.split('\n');
+  const blocks = [];
+  let currentBlockLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const cols = line.split('\t');
+    const col0 = cols[0] ? cols[0].trim() : '';
+
+    // Detect advisor header: col A has an advisor code.
+    // Data rows start with empty col A (tab-indented), so col0 being non-empty is key.
+    // Codes vary widely: AVL, BBWI (SFA), DTRA WEST, ICE-ERO, 75AWB, USAICoE, etc.
+    // Strategy: col A is non-empty, starts with alphanumeric, is not a row label,
+    // is not a pure number/percentage, and is not a file header keyword.
+    const isAdvisorHeader =
+      col0 !== '' &&
+      /^[A-Za-z0-9]/.test(col0) &&
+      !matchLabel(col0) &&
+      !/^\d+(\.\d+)?%?$/.test(col0) &&
+      !/^(code|avg|tot|sum|count|note|#)$/i.test(col0) &&
+      !/^\*/.test(col0);
+
+    if (isAdvisorHeader && currentBlockLines.length > 0) {
+      blocks.push(currentBlockLines.join('\n'));
+      currentBlockLines = [];
+    }
+
+    currentBlockLines.push(line);
+  }
+
+  if (currentBlockLines.length > 0) {
+    blocks.push(currentBlockLines.join('\n'));
+  }
+
+  return blocks;
 }
 
 // --- Parse Pasted Advisor Block ---
@@ -295,17 +335,8 @@ function showMsg(text, isError) {
   const el = document.getElementById('paste-msg');
   el.className = isError ? 'msg msg-err' : 'msg msg-ok';
   el.textContent = text;
-  setTimeout(() => { el.textContent = ''; el.className = ''; }, 6000);
-}
-
-function getNewestWorkshopDate(advisor) {
-  if (!advisor || !advisor.workshops || advisor.workshops.length === 0) return 0;
-  let max = 0;
-  advisor.workshops.forEach(ws => {
-    const t = new Date(ws.workshopDate).getTime();
-    if (t > max) max = t;
-  });
-  return max;
+  const duration = isError ? 10000 : 6000;
+  setTimeout(() => { el.textContent = ''; el.className = ''; }, duration);
 }
 
 function getSortedForecastKeys() {
@@ -315,10 +346,8 @@ function getSortedForecastKeys() {
       return keys.sort((a, b) => a.localeCompare(b));
     case 'za':
       return keys.sort((a, b) => b.localeCompare(a));
-    case 'recent':
-      return keys.sort((a, b) => getNewestWorkshopDate(advisors[b]) - getNewestWorkshopDate(advisors[a]));
-    case 'oldest':
-      return keys.sort((a, b) => getNewestWorkshopDate(advisors[a]) - getNewestWorkshopDate(advisors[b]));
+    case 'updated':
+      return keys.sort((a, b) => (advisors[b].lastUpdated || 0) - (advisors[a].lastUpdated || 0));
     default:
       return keys.sort();
   }
@@ -400,15 +429,15 @@ function renderForecast() {
           <div class="forecast-inputs">
             <div class="field">
               <label>Current Feds Registered</label>
-              <input type="number" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
+              <input type="number" min="0" step="1" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
             </div>
             <div class="field">
               <label>Current Spouses Registered</label>
-              <input type="number" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
+              <input type="number" min="0" step="1" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
             </div>
             <div class="field">
               <label>Target Attendance</label>
-              <input type="number" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
+              <input type="number" min="0" step="1" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
             </div>
           </div>
           ${hasData ? `
@@ -446,7 +475,10 @@ function renderForecast() {
       const key = e.target.dataset.key;
       const field = e.target.dataset.field;
       if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
-      forecasts[key][field] = e.target.value;
+      // Clamp to 0 if negative
+      let val = e.target.value;
+      if (val !== '' && Number(val) < 0) { val = '0'; e.target.value = '0'; }
+      forecasts[key][field] = val;
       saveData();
       updateForecastResults(key);
     });
@@ -529,11 +561,16 @@ function renderStoredData() {
   const countEl = document.getElementById('total-count');
   const keys = Object.keys(advisors).sort();
 
+  const deleteAllSection = document.getElementById('delete-all-section');
+
   if (keys.length === 0) {
     countEl.textContent = '';
     list.innerHTML = '<div class="empty-msg">No advisors stored yet. Use "Paste Data" to import.</div>';
+    if (deleteAllSection) deleteAllSection.style.display = 'none';
     return;
   }
+
+  if (deleteAllSection) deleteAllSection.style.display = 'flex';
 
   const totalWs = keys.reduce((sum, k) => sum + advisors[k].workshops.length, 0);
   countEl.textContent = `${keys.length} advisor record${keys.length !== 1 ? 's' : ''} · ${totalWs} total workshops`;
@@ -585,7 +622,11 @@ function renderStoredData() {
 
 // --- Event Handlers ---
 document.addEventListener('DOMContentLoaded', () => {
-  loadData(() => renderAll());
+  loadData(() => {
+    const sortSelect = document.getElementById('forecast-sort');
+    if (sortSelect) sortSelect.value = currentForecastSort;
+    renderAll();
+  });
 
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {
@@ -597,36 +638,83 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Import
+  // Import (supports multiple advisors pasted at once)
   document.getElementById('btn-import').addEventListener('click', () => {
     const text = document.getElementById('paste-area').value;
     if (!text.trim()) { showMsg('Nothing to paste.', true); return; }
-    try {
-      const result = parsePastedAdvisorBlock(text);
-      const key = advisorKey(result.code, result.location);
-      const isNew = !advisors[key];
 
-      if (isNew) {
-        advisors[key] = { code: result.code, location: result.location, workshops: result.workshops };
-      } else {
-        // Merge workshops: overwrite by date, add new ones
-        const existingByDate = {};
-        advisors[key].workshops.forEach(ws => { existingByDate[ws.workshopDate] = ws; });
-        result.workshops.forEach(ws => { existingByDate[ws.workshopDate] = ws; });
-        advisors[key].workshops = Object.values(existingByDate);
+    const blocks = splitMultiAdvisorBlocks(text);
+    const successes = [];
+    const errors = [];
+    let totalWorkshops = 0;
+
+    for (const block of blocks) {
+      try {
+        const result = parsePastedAdvisorBlock(block);
+        const key = advisorKey(result.code, result.location);
+        const isNew = !advisors[key];
+
+        if (isNew) {
+          advisors[key] = { code: result.code, location: result.location, workshops: result.workshops };
+        } else {
+          const existingByDate = {};
+          advisors[key].workshops.forEach(ws => { existingByDate[ws.workshopDate] = ws; });
+          result.workshops.forEach(ws => { existingByDate[ws.workshopDate] = ws; });
+          advisors[key].workshops = Object.values(existingByDate);
+        }
+
+        advisors[key].lastUpdated = Date.now();
+        if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
+
+        totalWorkshops += result.workshops.length;
+        successes.push(`${result.code} (${result.location})`);
+      } catch (e) {
+        const firstLine = block.trim().split('\n')[0] || '';
+        const label = firstLine.split('\t')[0].trim() || 'Unknown';
+        errors.push(`${label}: ${e.message}`);
       }
-
-      // Ensure forecast entry exists
-      if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
-
-      saveData();
-      document.getElementById('paste-area').value = '';
-      const verb = isNew ? 'Added' : 'Updated';
-      showMsg(`${verb} ${result.code} (${result.location}) — ${result.workshops.length} completed workshop(s).`, false);
-      renderAll();
-    } catch (e) {
-      showMsg(e.message, true);
     }
+
+    saveData();
+    document.getElementById('paste-area').value = '';
+
+    if (errors.length === 0) {
+      if (successes.length === 1) {
+        showMsg(`Imported ${successes[0]} — ${totalWorkshops} workshop(s).`, false);
+      } else {
+        showMsg(`Imported ${successes.length} advisors (${totalWorkshops} total workshops).`, false);
+      }
+    } else if (successes.length === 0) {
+      showMsg(errors.length === 1 ? errors[0] : `All ${errors.length} blocks failed. First error: ${errors[0]}`, true);
+    } else {
+      showMsg(`Imported ${successes.length}/${successes.length + errors.length} advisors (${totalWorkshops} workshops). Errors: ${errors.join('; ')}`, true);
+    }
+
+    renderAll();
+  });
+
+  // Delete all data
+  document.getElementById('btn-delete-all').addEventListener('click', () => {
+    const count = Object.keys(advisors).length;
+    if (confirm(`Delete ALL data for ${count} advisor(s)? This cannot be undone.`)) {
+      advisors = {};
+      forecasts = {};
+      saveData();
+      renderAll();
+    }
+  });
+
+  // File upload — read file and trigger import
+  document.getElementById('file-upload').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      document.getElementById('paste-area').value = evt.target.result;
+      document.getElementById('btn-import').click();
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   });
 
   // Forecast search
