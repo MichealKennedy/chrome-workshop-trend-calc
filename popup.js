@@ -283,27 +283,32 @@ function computeWorkshopStats(ws) {
   const totalAttended = ws.totalFedsAttended + ws.totalSpsAttended;
   if (totalRegClose === 0) return null;
 
-  const confirmationRate = totalConfirmed > 0 ? totalConfirmed / totalRegClose : 0;
-  const attendanceOfConfirmed = totalConfirmed > 0 ? totalAttended / totalConfirmed : 0;
-
+  const registeredShowUp = Math.max(0, totalAttended - ws.totalWalkins);
   const unconfirmedCount = totalRegClose - totalConfirmed;
-  let unconfirmedShowRate = 0;
-  if (unconfirmedCount > 0 && totalConfirmed > 0) {
-    unconfirmedShowRate = ((totalAttended - ws.totalWalkins) - (totalConfirmed * attendanceOfConfirmed)) / unconfirmedCount;
+  const confirmationRate = totalConfirmed > 0 ? totalConfirmed / totalRegClose : 0;
+
+  // Estimate separate show rates for confirmed vs unconfirmed
+  // Assumes confirmed attendees show preferentially (higher rate)
+  let confirmedShowRate = 0, unconfirmedShowRate = 0;
+  if (totalConfirmed > 0) {
+    confirmedShowRate = Math.min(1.0, registeredShowUp / totalConfirmed);
+    const confirmedWhoShowed = totalConfirmed * confirmedShowRate;
+    const unconfirmedWhoShowed = Math.max(0, registeredShowUp - confirmedWhoShowed);
+    unconfirmedShowRate = unconfirmedCount > 0 ? unconfirmedWhoShowed / unconfirmedCount : 0;
   }
 
-  let effectiveShowRate = confirmationRate * attendanceOfConfirmed + (1 - confirmationRate) * unconfirmedShowRate;
-  if (isNaN(effectiveShowRate) || !isFinite(effectiveShowRate)) {
-    effectiveShowRate = (totalAttended - ws.totalWalkins) / totalRegClose;
-  }
+  const effectiveShowRate = totalRegClose > 0 ? registeredShowUp / totalRegClose : 0;
 
-  return { totalRegClose, totalConfirmed, totalAttended, confirmationRate, attendanceOfConfirmed, effectiveShowRate, walkins: ws.totalWalkins };
+  return { totalRegClose, totalConfirmed, totalAttended, confirmationRate, confirmedShowRate, unconfirmedShowRate, effectiveShowRate, walkins: ws.totalWalkins };
 }
 
 function computeRecencyWeighted(workshopList) {
   const today = new Date();
   const today_ms = today.getTime();
   let srNum = 0, srDen = 0, wkNum = 0, wkDen = 0;
+  let csrNum = 0, csrDen = 0, usrNum = 0, usrDen = 0;
+  let minSR = Infinity, maxSR = -Infinity;
+  let wsCount = 0;
 
   workshopList.forEach(ws => {
     const stats = computeWorkshopStats(ws);
@@ -315,15 +320,40 @@ function computeRecencyWeighted(workshopList) {
     if (!isNaN(stats.effectiveShowRate) && isFinite(stats.effectiveShowRate)) {
       srNum += stats.effectiveShowRate * w;
       srDen += w;
+      minSR = Math.min(minSR, stats.effectiveShowRate);
+      maxSR = Math.max(maxSR, stats.effectiveShowRate);
+    }
+    // Track confirmed and unconfirmed show rates separately
+    if (stats.totalConfirmed > 0) {
+      csrNum += stats.confirmedShowRate * w;
+      csrDen += w;
+      if (!isNaN(stats.unconfirmedShowRate) && isFinite(stats.unconfirmedShowRate)) {
+        usrNum += stats.unconfirmedShowRate * w;
+        usrDen += w;
+      }
     }
     wkNum += stats.walkins * w;
     wkDen += w;
+    wsCount++;
   });
 
   return {
     showRate: srDen > 0 ? srNum / srDen : 0,
+    confirmedShowRate: csrDen > 0 ? csrNum / csrDen : 0,
+    unconfirmedShowRate: usrDen > 0 ? usrNum / usrDen : 0,
     avgWalkins: wkDen > 0 ? wkNum / wkDen : 0,
+    minShowRate: minSR === Infinity ? 0 : minSR,
+    maxShowRate: maxSR === -Infinity ? 0 : maxSR,
+    wsCount,
   };
+}
+
+// --- Confidence Level ---
+function getConfidenceLevel(count) {
+  if (count >= 10) return { label: 'High', cls: 'conf-high' };
+  if (count >= 6) return { label: 'Good', cls: 'conf-good' };
+  if (count >= 3) return { label: 'Moderate', cls: 'conf-mod' };
+  return { label: 'Low', cls: 'conf-low' };
 }
 
 // --- UI ---
@@ -392,27 +422,42 @@ function renderForecast() {
 
   // Ensure each advisor has a forecast entry
   keys.forEach(key => {
-    if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
+    if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', confirmedFeds: '', confirmedSps: '', target: '35' };
   });
 
   container.innerHTML = keys.map(key => {
     const adv = advisors[key];
     const fc = forecasts[key];
-    const { showRate, avgWalkins } = computeRecencyWeighted(adv.workshops);
+    const { showRate, confirmedShowRate, unconfirmedShowRate, avgWalkins, minShowRate, maxShowRate, wsCount } = computeRecencyWeighted(adv.workshops);
 
     const feds = Number(fc.currentFeds) || 0;
     const sps = Number(fc.currentSps) || 0;
+    const confFeds = Math.min(Number(fc.confirmedFeds) || 0, feds);
+    const confSps = Math.min(Number(fc.confirmedSps) || 0, sps);
     const totalReg = feds + sps;
+    const totalConfirmed = confFeds + confSps;
+    const totalUnconfirmed = totalReg - totalConfirmed;
     const target = Number(fc.target) || 0;
 
-    const expectedAtt = totalReg > 0 ? totalReg * showRate + avgWalkins : 0;
-    const closeAt = target > 0 && showRate > 0 ? Math.ceil(Math.max(0, (target - avgWalkins) / showRate)) : 0;
+    // Use confirmed/unconfirmed split when confirmed numbers are provided
+    let expectedAtt = 0;
+    let effectiveRate = showRate;
+    if (totalReg > 0) {
+      if (totalConfirmed > 0 && confirmedShowRate > 0) {
+        expectedAtt = totalConfirmed * confirmedShowRate + totalUnconfirmed * unconfirmedShowRate + avgWalkins;
+        effectiveRate = (totalConfirmed * confirmedShowRate + totalUnconfirmed * unconfirmedShowRate) / totalReg;
+      } else {
+        expectedAtt = totalReg * showRate + avgWalkins;
+      }
+    }
+    const closeAt = target > 0 && effectiveRate > 0 ? Math.ceil(Math.max(0, (target - avgWalkins) / effectiveRate)) : 0;
     const shouldClose = totalReg > 0 && closeAt > 0 && totalReg >= closeAt;
     const hasData = totalReg > 0 && target > 0;
 
     const borderClass = hasData ? (shouldClose ? 'close' : 'open') : '';
+    const confirmInfo = totalConfirmed > 0 ? ` (${totalConfirmed} confirmed)` : '';
     const resultStr = hasData
-      ? `${adv.code} ${adv.location}: ${totalReg} is ${shouldClose ? 'at/above' : 'below'} ${closeAt}: ${shouldClose ? 'CLOSE' : 'KEEP OPEN'}`
+      ? `${adv.code} ${adv.location}: ${totalReg} reg${confirmInfo} is ${shouldClose ? 'at/above' : 'below'} ${closeAt}: ${shouldClose ? 'CLOSE' : 'KEEP OPEN'}`
       : '';
     const sid = safeId(key);
 
@@ -423,17 +468,25 @@ function renderForecast() {
           <span class="advisor-card-toggle" id="ftoggle-${sid}">&#9654;</span>
           <span class="advisor-badge">${esc(adv.code)}</span>
           <span class="advisor-location">${esc(adv.location)}</span>
-          <span class="advisor-meta">${adv.workshops.length} ws · ${(showRate * 100).toFixed(1)}% show rate</span>
+          <span class="advisor-meta">${adv.workshops.length} ws · ${(showRate * 100).toFixed(1)}% show${confirmedShowRate > 0 ? ` · ${(confirmedShowRate * 100).toFixed(1)}% conf` : ''}</span>
         </div>
         <div class="forecast-card-body" id="fbody-${sid}">
           <div class="forecast-inputs">
             <div class="field">
-              <label>Current Feds Registered</label>
+              <label>Feds Registered</label>
               <input type="number" min="0" step="1" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
             </div>
             <div class="field">
-              <label>Current Spouses Registered</label>
+              <label>Confirmed Feds</label>
+              <input type="number" min="0" step="1" value="${esc(fc.confirmedFeds)}" data-key="${esc(key)}" data-field="confirmedFeds" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Spouses Registered</label>
               <input type="number" min="0" step="1" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Confirmed Spouses</label>
+              <input type="number" min="0" step="1" value="${esc(fc.confirmedSps)}" data-key="${esc(key)}" data-field="confirmedSps" placeholder="0">
             </div>
             <div class="field">
               <label>Target Attendance</label>
@@ -460,6 +513,19 @@ function renderForecast() {
               <span class="badge ${shouldClose ? 'badge-close' : 'badge-open'}">${shouldClose ? 'CLOSE' : 'KEEP OPEN'}</span>
               <div class="decision-note">${totalReg} ${shouldClose ? '≥' : '<'} ${closeAt}</div>
             </div>
+            <div class="result-item">
+              <div class="rlabel">Buffer</div>
+              <div class="rvalue ${(totalReg - closeAt) >= 0 ? 'buf-over' : 'buf-under'}">${(totalReg - closeAt) >= 0 ? '+' + (totalReg - closeAt) + ' over' : 'Need ' + (closeAt - totalReg)}</div>
+            </div>
+            <div class="result-item">
+              <div class="rlabel">Range (Worst–Best)</div>
+              <div class="rvalue range">${Math.round(totalReg * minShowRate + avgWalkins)} – ${Math.round(totalReg * maxShowRate + avgWalkins)}</div>
+            </div>
+            <div class="result-item">
+              <div class="rlabel">Confidence</div>
+              <span class="conf-badge ${getConfidenceLevel(wsCount).cls}">${getConfidenceLevel(wsCount).label}</span>
+              <div class="decision-note">${wsCount} workshop${wsCount !== 1 ? 's' : ''}</div>
+            </div>
           </div>
           ${resultStr ? `<button class="copy-btn" data-action="copy-result" data-text="${esc(resultStr)}">📋 Copy result</button>` : ''}
           </div>
@@ -474,7 +540,7 @@ function renderForecast() {
     inp.addEventListener('input', (e) => {
       const key = e.target.dataset.key;
       const field = e.target.dataset.field;
-      if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
+      if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', confirmedFeds: '', confirmedSps: '', target: '35' };
       // Clamp to 0 if negative
       let val = e.target.value;
       if (val !== '' && Number(val) < 0) { val = '0'; e.target.value = '0'; }
@@ -491,16 +557,30 @@ function renderForecast() {
 function updateForecastResults(key) {
   const adv = advisors[key];
   if (!adv) return;
-  const fc = forecasts[key] || { currentFeds: '', currentSps: '', target: '35' };
-  const { showRate, avgWalkins } = computeRecencyWeighted(adv.workshops);
+  const fc = forecasts[key] || { currentFeds: '', currentSps: '', confirmedFeds: '', confirmedSps: '', target: '35' };
+  const { showRate, confirmedShowRate, unconfirmedShowRate, avgWalkins, minShowRate, maxShowRate, wsCount } = computeRecencyWeighted(adv.workshops);
 
   const feds = Number(fc.currentFeds) || 0;
   const sps = Number(fc.currentSps) || 0;
+  const confFeds = Math.min(Number(fc.confirmedFeds) || 0, feds);
+  const confSps = Math.min(Number(fc.confirmedSps) || 0, sps);
   const totalReg = feds + sps;
+  const totalConfirmed = confFeds + confSps;
+  const totalUnconfirmed = totalReg - totalConfirmed;
   const target = Number(fc.target) || 0;
 
-  const expectedAtt = totalReg > 0 ? totalReg * showRate + avgWalkins : 0;
-  const closeAt = target > 0 && showRate > 0 ? Math.ceil(Math.max(0, (target - avgWalkins) / showRate)) : 0;
+  // Use confirmed/unconfirmed split when confirmed numbers are provided
+  let expectedAtt = 0;
+  let effectiveRate = showRate;
+  if (totalReg > 0) {
+    if (totalConfirmed > 0 && confirmedShowRate > 0) {
+      expectedAtt = totalConfirmed * confirmedShowRate + totalUnconfirmed * unconfirmedShowRate + avgWalkins;
+      effectiveRate = (totalConfirmed * confirmedShowRate + totalUnconfirmed * unconfirmedShowRate) / totalReg;
+    } else {
+      expectedAtt = totalReg * showRate + avgWalkins;
+    }
+  }
+  const closeAt = target > 0 && effectiveRate > 0 ? Math.ceil(Math.max(0, (target - avgWalkins) / effectiveRate)) : 0;
   const shouldClose = totalReg > 0 && closeAt > 0 && totalReg >= closeAt;
   const hasData = totalReg > 0 && target > 0;
 
@@ -513,8 +593,9 @@ function updateForecastResults(key) {
 
   // Update or create results section
   let resultsEl = row.querySelector('.forecast-results-wrap');
+  const confirmInfo = totalConfirmed > 0 ? ` (${totalConfirmed} confirmed)` : '';
   const resultStr = hasData
-    ? `${adv.code} ${adv.location}: ${totalReg} is ${shouldClose ? 'at/above' : 'below'} ${closeAt}: ${shouldClose ? 'CLOSE' : 'KEEP OPEN'}`
+    ? `${adv.code} ${adv.location}: ${totalReg} reg${confirmInfo} is ${shouldClose ? 'at/above' : 'below'} ${closeAt}: ${shouldClose ? 'CLOSE' : 'KEEP OPEN'}`
     : '';
 
   if (!hasData) {
@@ -540,6 +621,19 @@ function updateForecastResults(key) {
         <div class="rlabel">Decision</div>
         <span class="badge ${shouldClose ? 'badge-close' : 'badge-open'}">${shouldClose ? 'CLOSE' : 'KEEP OPEN'}</span>
         <div class="decision-note">${totalReg} ${shouldClose ? '≥' : '<'} ${closeAt}</div>
+      </div>
+      <div class="result-item">
+        <div class="rlabel">Buffer</div>
+        <div class="rvalue ${(totalReg - closeAt) >= 0 ? 'buf-over' : 'buf-under'}">${(totalReg - closeAt) >= 0 ? '+' + (totalReg - closeAt) + ' over' : 'Need ' + (closeAt - totalReg)}</div>
+      </div>
+      <div class="result-item">
+        <div class="rlabel">Range (Worst–Best)</div>
+        <div class="rvalue range">${Math.round(totalReg * minShowRate + avgWalkins)} – ${Math.round(totalReg * maxShowRate + avgWalkins)}</div>
+      </div>
+      <div class="result-item">
+        <div class="rlabel">Confidence</div>
+        <span class="conf-badge ${getConfidenceLevel(wsCount).cls}">${getConfidenceLevel(wsCount).label}</span>
+        <div class="decision-note">${wsCount} workshop${wsCount !== 1 ? 's' : ''}</div>
       </div>
     </div>
     ${resultStr ? `<button class="copy-btn" data-action="copy-result" data-text="${esc(resultStr)}">📋 Copy result</button>` : ''}
@@ -664,7 +758,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         advisors[key].lastUpdated = Date.now();
-        if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', target: '35' };
+        if (!forecasts[key]) forecasts[key] = { currentFeds: '', currentSps: '', confirmedFeds: '', confirmedSps: '', target: '35' };
 
         totalWorkshops += result.workshops.length;
         successes.push(`${result.code} (${result.location})`);

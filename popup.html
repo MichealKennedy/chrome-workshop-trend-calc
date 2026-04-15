@@ -66,7 +66,7 @@
   }
   .advisor-location { font-size: 11px; color: #94a3b8; }
   .advisor-meta { font-size: 10px; color: #475569; margin-left: auto; }
-  .forecast-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .forecast-inputs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
   .field label {
     display: block; font-size: 9px; text-transform: uppercase;
     letter-spacing: 0.5px; color: #64748b; font-weight: 600; margin-bottom: 3px;
@@ -94,6 +94,26 @@
     font-family: inherit; font-size: 10px; margin-top: 6px; transition: all 0.15s;
   }
   .copy-btn:hover { border-color: #3b82f6; color: #e2e8f0; }
+  /* Buffer / Margin */
+  .rvalue.buf-over { color: #4ade80; }
+  .rvalue.buf-under { color: #f87171; }
+  /* Confidence badges */
+  .conf-badge { display: inline-block; padding: 3px 10px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; }
+  .conf-high { background: #166534; color: #4ade80; }
+  .conf-good { background: #1e3a5f; color: #93c5fd; }
+  .conf-mod { background: #422006; color: #fbbf24; }
+  .conf-low { background: #450a0a; color: #f87171; }
+  /* Range */
+  .rvalue.range { font-size: 16px; }
+  /* Info / How It Works tab */
+  .info-panel { line-height: 1.7; }
+  .info-panel h2 { font-size: 13px; font-weight: 700; color: #f8fafc; margin: 16px 0 6px; }
+  .info-panel h2:first-child { margin-top: 0; }
+  .info-panel p { font-size: 11px; color: #94a3b8; margin-bottom: 8px; }
+  .info-panel .formula { background: #0f172a; border: 1px solid #1e293b; border-radius: 4px; padding: 8px 12px; font-size: 11px; color: #e2e8f0; margin: 6px 0 10px; }
+  .info-panel ul { margin: 4px 0 10px 18px; font-size: 11px; color: #94a3b8; }
+  .info-panel li { margin-bottom: 4px; }
+  .info-panel .tip { background: #052e16; border: 1px solid #166534; border-radius: 5px; padding: 8px 12px; color: #4ade80; font-size: 11px; margin: 10px 0; }
   /* Advisor cards in stored data tab */
   .advisor-card {
     background: #0f172a; border: 1px solid #1e293b; border-radius: 6px;
@@ -167,6 +187,7 @@
     <button class="tab active" data-tab="forecast">Forecast</button>
     <button class="tab" data-tab="paste">Paste Data</button>
     <button class="tab" data-tab="data">Stored Data</button>
+    <button class="tab" data-tab="info">How It Works</button>
   </div>
 
   <div id="panel-paste" class="panel">
@@ -214,6 +235,46 @@
     <div class="delete-section" id="delete-all-section" style="display:none; margin-top: 14px;">
       <button class="btn btn-danger btn-sm" id="btn-delete-all">Delete All Data</button>
       <span class="warn-text">Removes all advisors, workshops, and forecast data</span>
+    </div>
+  </div>
+
+  <div id="panel-info" class="panel">
+    <div class="info-panel">
+      <h2>📊 Show Rate</h2>
+      <p>The <strong>show rate</strong> is the percentage of registered people who actually attend the workshop (excluding walk-ins). It's calculated from historical data and <strong>weighted by recency</strong> — more recent workshops have more influence than older ones.</p>
+
+      <h2>✅ Confirmed vs Unconfirmed</h2>
+      <p>When you enter <strong>Confirmed Feds</strong> and <strong>Confirmed Spouses</strong>, the calculator uses two separate historical rates:</p>
+      <ul>
+        <li><strong>Confirmed Show Rate</strong> — how often confirmed registrants attend (typically very high)</li>
+        <li><strong>Unconfirmed Show Rate</strong> — how often unconfirmed registrants attend (typically much lower)</li>
+      </ul>
+      <p>This gives a more accurate prediction than treating all registrants the same.</p>
+      <div class="formula">Expected = (Confirmed × Conf. Rate) + (Unconfirmed × Unconf. Rate) + Avg Walk-ins</div>
+      <p>If you don't enter confirmed numbers, the calculator falls back to the overall blended show rate.</p>
+
+      <h2>🎯 Close At</h2>
+      <p>The <strong>Close At</strong> number is the minimum number of registrations needed to expect hitting your target attendance. When your current registrations meet or exceed this number, the recommendation is <strong>CLOSE</strong>.</p>
+
+      <h2>📈 Expected Attendance</h2>
+      <p>Your predicted headcount based on current registrations, historical show rates, and average walk-ins for this advisor/location.</p>
+
+      <h2>↕ Buffer / Margin</h2>
+      <p>Shows how many registrations you are above or below the close target. Green <strong>"+X over"</strong> means you're safely past the threshold. Red <strong>"Need X more"</strong> means you still need more registrations before closing.</p>
+
+      <h2>📉 Range (Best / Worst Case)</h2>
+      <p>Uses the <strong>highest and lowest</strong> historical show rates for this advisor to show the possible attendance range. The best case assumes every workshop goes as well as their best; the worst case assumes it goes like their worst.</p>
+
+      <h2>🔒 Confidence Level</h2>
+      <p>Based on how many completed workshops are in the historical data:</p>
+      <ul>
+        <li><strong>High</strong> — 10+ workshops (very reliable)</li>
+        <li><strong>Good</strong> — 6–9 workshops (reliable)</li>
+        <li><strong>Moderate</strong> — 3–5 workshops (use with caution)</li>
+        <li><strong>Low</strong> — 1–2 workshops (limited data, treat as rough estimate)</li>
+      </ul>
+
+      <div class="tip">💡 <strong>Tip:</strong> For the most accurate forecasts, always enter confirmed numbers and keep historical data up to date by pasting new workshop results after each event.</div>
     </div>
   </div>
 </div>
