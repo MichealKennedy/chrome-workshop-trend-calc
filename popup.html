@@ -66,7 +66,24 @@
   }
   .advisor-location { font-size: 11px; color: #94a3b8; }
   .advisor-meta { font-size: 10px; color: #475569; margin-left: auto; }
-  .forecast-inputs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .forecast-inputs { display: flex; gap: 10px; }
+  .input-group {
+    display: flex; gap: 8px; padding: 8px 10px 8px 12px;
+    border-left: 3px solid #334155; border-radius: 3px;
+    background: rgba(15, 23, 42, 0.5); position: relative;
+  }
+  .input-group.group-reg { border-left-color: #3b82f6; }
+  .input-group.group-conf { border-left-color: #22c55e; }
+  .input-group.group-target { border-left-color: #f59e0b; }
+  .input-group-label {
+    position: absolute; top: -1px; left: 10px;
+    font-size: 8px; text-transform: uppercase; letter-spacing: 0.8px;
+    font-weight: 700; color: #475569; background: #0f172a;
+    padding: 0 4px; line-height: 1;
+  }
+  .input-group.group-reg .input-group-label { color: #60a5fa; }
+  .input-group.group-conf .input-group-label { color: #4ade80; }
+  .input-group.group-target .input-group-label { color: #fbbf24; }
   .field label {
     display: block; font-size: 9px; text-transform: uppercase;
     letter-spacing: 0.5px; color: #64748b; font-weight: 600; margin-bottom: 3px;

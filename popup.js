@@ -479,25 +479,34 @@ function renderForecast() {
         </div>
         <div class="forecast-card-body" id="fbody-${sid}">
           <div class="forecast-inputs">
-            <div class="field">
-              <label>Feds Registered</label>
-              <input type="number" min="0" step="1" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
+            <div class="input-group group-reg">
+              <span class="input-group-label">Registered</span>
+              <div class="field">
+                <label>Feds</label>
+                <input type="number" min="0" step="1" value="${esc(fc.currentFeds)}" data-key="${esc(key)}" data-field="currentFeds" placeholder="0">
+              </div>
+              <div class="field">
+                <label>Spouses</label>
+                <input type="number" min="0" step="1" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
+              </div>
             </div>
-            <div class="field">
-              <label>Confirmed Feds</label>
-              <input type="number" min="0" step="1" value="${esc(fc.confirmedFeds)}" data-key="${esc(key)}" data-field="confirmedFeds" placeholder="0">
+            <div class="input-group group-conf">
+              <span class="input-group-label">Confirmed</span>
+              <div class="field">
+                <label>Feds</label>
+                <input type="number" min="0" step="1" value="${esc(fc.confirmedFeds)}" data-key="${esc(key)}" data-field="confirmedFeds" placeholder="0">
+              </div>
+              <div class="field">
+                <label>Spouses</label>
+                <input type="number" min="0" step="1" value="${esc(fc.confirmedSps)}" data-key="${esc(key)}" data-field="confirmedSps" placeholder="0">
+              </div>
             </div>
-            <div class="field">
-              <label>Spouses Registered</label>
-              <input type="number" min="0" step="1" value="${esc(fc.currentSps)}" data-key="${esc(key)}" data-field="currentSps" placeholder="0">
-            </div>
-            <div class="field">
-              <label>Confirmed Spouses</label>
-              <input type="number" min="0" step="1" value="${esc(fc.confirmedSps)}" data-key="${esc(key)}" data-field="confirmedSps" placeholder="0">
-            </div>
-            <div class="field">
-              <label>Target Attendance</label>
-              <input type="number" min="0" step="1" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
+            <div class="input-group group-target">
+              <span class="input-group-label">Target</span>
+              <div class="field">
+                <label>Attendance</label>
+                <input type="number" min="0" step="1" value="${esc(fc.target)}" data-key="${esc(key)}" data-field="target" placeholder="35">
+              </div>
             </div>
           </div>
           ${hasData ? `
