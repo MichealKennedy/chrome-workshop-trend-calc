@@ -123,7 +123,8 @@ function splitMultiAdvisorBlocks(text) {
       !matchLabel(col0) &&
       !/^\d+(\.\d+)?%?$/.test(col0) &&
       !/^(code|avg|tot|sum|count|note|#)$/i.test(col0) &&
-      !/^\*/.test(col0);
+      !/^\*/.test(col0) &&
+      !/\b(date|open|close|day|fed|spouse|sp\b|attend|confirm|walk|yes|no\s*show|cancel|cnl|reg|scarcity|early|moved|reopen|avg|conf|total|note)\b/i.test(col0);
 
     if (isAdvisorHeader && currentBlockLines.length > 0) {
       blocks.push(currentBlockLines.join('\n'));
