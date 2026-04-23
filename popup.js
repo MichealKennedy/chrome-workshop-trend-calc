@@ -368,12 +368,12 @@ function esc(str) {
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function showMsg(text, isError) {
+function showMsg(text, isError, duration) {
   const el = document.getElementById('paste-msg');
   el.className = isError ? 'msg msg-err' : 'msg msg-ok';
-  el.textContent = text;
-  const duration = isError ? 10000 : 6000;
-  setTimeout(() => { el.textContent = ''; el.className = ''; }, duration);
+  el.innerHTML = text;
+  duration = duration || (isError ? 10000 : 6000);
+  setTimeout(() => { el.innerHTML = ''; el.className = ''; }, duration);
 }
 
 function getSortedForecastKeys() {
@@ -746,8 +746,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const blocks = splitMultiAdvisorBlocks(text);
     const successes = [];
-    const errors = [];
+    const skipped = [];  // no data / future workshops — not real errors
+    const errors = [];   // real parsing failures
     let totalWorkshops = 0;
+
+    // Patterns that indicate a "skipped" entry rather than a real error
+    const SKIP_PATTERNS = [
+      /no completed workshops/i,
+      /no valid workshop dates/i,
+      /0 attendance/i,
+      /future workshops/i,
+    ];
 
     for (const block of blocks) {
       try {
@@ -772,23 +781,37 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) {
         const firstLine = block.trim().split('\n')[0] || '';
         const label = firstLine.split('\t')[0].trim() || 'Unknown';
-        errors.push(`${label}: ${e.message}`);
+        const msg = e.message;
+        if (SKIP_PATTERNS.some(p => p.test(msg))) {
+          skipped.push(label);
+        } else {
+          errors.push(`${label}: ${msg}`);
+        }
       }
     }
 
     saveData();
     document.getElementById('paste-area').value = '';
 
-    if (errors.length === 0) {
-      if (successes.length === 1) {
-        showMsg(`Imported ${successes[0]} — ${totalWorkshops} workshop(s).`, false);
-      } else {
-        showMsg(`Imported ${successes.length} advisors (${totalWorkshops} total workshops).`, false);
-      }
-    } else if (successes.length === 0) {
-      showMsg(errors.length === 1 ? errors[0] : `All ${errors.length} blocks failed. First error: ${errors[0]}`, true);
+    // Build a structured import summary
+    const parts = [];
+    if (successes.length > 0) {
+      parts.push(`<strong>✅ Imported ${successes.length} advisor${successes.length !== 1 ? 's' : ''}</strong> (${totalWorkshops} workshops)`);
+    }
+    if (skipped.length > 0) {
+      parts.push(`<strong>⏭ Skipped ${skipped.length}</strong> (no completed workshops): ${esc(skipped.join(', '))}`);
+    }
+    if (errors.length > 0) {
+      parts.push(`<strong>⚠ ${errors.length} error${errors.length !== 1 ? 's' : ''}:</strong> ${errors.map(e => esc(e)).join('; ')}`);
+    }
+
+    const hasProblems = errors.length > 0;
+    const msgHtml = parts.join('<br>');
+    const duration = parts.length > 1 ? 15000 : 6000;
+    if (successes.length === 0 && skipped.length === 0) {
+      showMsg(errors.length === 1 ? esc(errors[0]) : `All ${errors.length} blocks failed. First error: ${esc(errors[0])}`, true, duration);
     } else {
-      showMsg(`Imported ${successes.length}/${successes.length + errors.length} advisors (${totalWorkshops} workshops). Errors: ${errors.join('; ')}`, true);
+      showMsg(msgHtml, hasProblems, duration);
     }
 
     renderAll();
