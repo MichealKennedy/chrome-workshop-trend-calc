@@ -756,6 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
       /no valid workshop dates/i,
       /0 attendance/i,
       /future workshops/i,
+      /could not find row labels/i,
     ];
 
     for (const block of blocks) {
