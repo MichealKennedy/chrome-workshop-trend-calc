@@ -124,7 +124,13 @@ function splitMultiAdvisorBlocks(text) {
       !/^\d+(\.\d+)?%?$/.test(col0) &&
       !/^(code|avg|tot|sum|count|note|#)$/i.test(col0) &&
       !/^\*/.test(col0) &&
-      !/\b(date|open|close|day|fed|spouse|sp\b|attend|confirm|walk|yes|no\s*show|cancel|cnl|reg|scarcity|early|moved|reopen|avg|conf|total|note)\b/i.test(col0);
+      !/\b(date|open|close|day|fed|spouse|sp\b|attend|confirm|walk|yes|no\s*show|cancel|cnl|reg|scarcity|early|moved|reopen|avg|conf|total|note)\b/i.test(col0) &&
+      // Reject lines containing date-like patterns (e.g. "ReOp 44/12 4-9", "1/29 to 2/17")
+      !/\d+\/\d+/.test(col0) &&
+      // Reject lines with date-range connectors (e.g. "Cl 4-13 to refill 4-21")
+      !/\bto\b/i.test(col0) &&
+      // Reject section headers / notes (e.g. "Left Program / Changed Cities")
+      !/\b(left|program|changed|cities|refill)\b/i.test(col0);
 
     if (isAdvisorHeader && currentBlockLines.length > 0) {
       blocks.push(currentBlockLines.join('\n'));
